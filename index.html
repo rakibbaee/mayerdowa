@@ -26,7 +26,7 @@ input{width:150px}button{cursor:pointer}
 #help{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);font-size:12px;background:var(--chip);color:var(--fg);padding:5px 10px;border-radius:8px;max-width:50vw;text-align:center}
 @media(max-width:800px){#help{display:none}#info{top:calc(70px + env(safe-area-inset-top,0px))}}
 #msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:30px;font-weight:700;background:rgba(0,0,0,.5);color:#fff;text-align:center;cursor:pointer;line-height:1.5}
-</style></head><body>
+</style><meta property="og:image" content="https://bolt.new/static/og_default.png"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://bolt.new/static/og_default.png"></head><body>
 <canvas id="c"></canvas>
 <div id="hud"><div id="spd">0</div><small>km/h</small></div>
 <div id="info">Deliveries <b id="sc">0</b> · Time <b id="tm">100</b>s · <b id="ds">0</b> m<div id="arrow">▲</div></div>
@@ -201,10 +201,23 @@ const dm=new THREE.InstancedMesh(new THREE.BoxGeometry(.25,.02,3),new THREE.Mesh
 for(let i=0;i<90;i++){const a=i/90*Math.PI*2;o.position.set(Math.cos(a)*120,.05,Math.sin(a)*120);o.rotation.set(0,-a,0);o.scale.set(1,1,1);o.updateMatrix();dm.setMatrixAt(i,o.matrix)}S.add(dm);
 function inst(geo,mat,n,fn){const m=new THREE.InstancedMesh(geo,mat,n);m.castShadow=m.receiveShadow=true;for(let i=0;i<n;i++){o.position.set(0,0,0);o.rotation.set(0,0,0);o.scale.set(1,1,1);fn(o,i,m);o.updateMatrix();m.setMatrixAt(i,o.matrix)}m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;S.add(m);return m}
 const MW=c=>new THREE.MeshStandardMaterial({color:c,roughness:.95,flatShading:true});
-// trees
-const T=[];for(let i=0;i<300;i++){const a=rnd()*6.283,k=rnd(),r=k<.15?86+rnd()*20:k<.45?134+rnd()*14:150+rnd()*240;T.push({x:Math.cos(a)*r,z:Math.sin(a)*r,s:.8+rnd()*.7})}
-inst(new THREE.CylinderGeometry(.18,.3,5,6).translate(0,2.5,0),MW(0x5a3d22),300,(q,i)=>{const t=T[i];q.position.set(t.x,0,t.z);q.scale.setScalar(t.s)});
-inst(new THREE.IcosahedronGeometry(2.4,1).scale(1,.8,1).translate(0,6.4,0),MW(0xffffff),300,(q,i,m)=>{const t=T[i];q.position.set(t.x,0,t.z);q.scale.setScalar(t.s);m.setColorAt(i,new THREE.Color().setHSL(.24+rnd()*.07,.45,.2+rnd()*.12))});
+// trees: broadleaf and conifer species, each a merged trunk plus a lumpy canopy shaded darker underneath
+const TREES=[];for(let i=0;i<300;i++){const a=rnd()*6.283,k=rnd(),r=k<.15?86+rnd()*20:k<.45?134+rnd()*14:150+rnd()*240;TREES.push({x:Math.cos(a)*r,z:Math.sin(a)*r,s:.8+rnd()*.7,sy:.9+rnd()*.25,ry:rnd()*6.283,pine:rnd()<.35})}
+function lumpy(g,amp,seed){const p=g.attributes.position,v=new V3();for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i);const n=v.clone().normalize(),d=1+amp*(Math.sin(n.x*4.1+seed)*Math.cos(n.y*3.7-seed)+.5*Math.sin(n.z*6.3+n.x*2.9+seed*.7));p.setXYZ(i,v.x*d,v.y*d,v.z*d)}g.computeVertexNormals();return g}
+function limb(x,y,z,dx,dy,dz,len,r){const dir=new V3(dx,dy,dz).normalize(),g=new THREE.CylinderGeometry(r*.45,r,len,5);g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0,1,0),dir));return g.translate(x+dir.x*len/2,y+dir.y*len/2,z+dir.z*len/2)}
+function mergeGeos(list){const pos=[],nor=[],col=[];list.forEach(g=>{const ng=g.index?g.toNonIndexed():g,p=ng.attributes.position,n=ng.attributes.normal;for(let i=0;i<p.count;i++){pos.push(p.getX(i),p.getY(i),p.getZ(i));nor.push(n.getX(i),n.getY(i),n.getZ(i));col.push(1,1,1)}});const m=new THREE.BufferGeometry();m.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));m.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));m.setAttribute('color',new THREE.Float32BufferAttribute(col,3));return m}
+function shadeCanopy(g,lo,hi,dark){const p=g.attributes.position,c=g.attributes.color;for(let i=0;i<p.count;i++){const k=dark+(1-dark)*THREE.MathUtils.smoothstep(p.getY(i),lo,hi)*(.92+.16*rnd());c.setXYZ(i,k,k,k)}return g}
+function sphereBlob(x,y,z,r,seed){const g=new THREE.SphereGeometry(r,10,8);g.scale(1,.85,1);return lumpy(g,.14,seed).translate(x,y,z)}
+const leafMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.85,metalness:0});
+const barkMat=new THREE.MeshStandardMaterial({color:0x6e4f32,roughness:.95});
+const broadTrunk=mergeGeos([new THREE.CylinderGeometry(.14,.26,5.4,7).translate(0,2.7,0),limb(0,3.6,0,1,.7,.3,2.4,.11),limb(0,4.2,0,-.8,.6,.5,2.2,.1),limb(0,4.6,0,.2,.8,-1,2,.09)]);
+const broadLeaves=shadeCanopy(mergeGeos([[0,6.9,0,1.9],[1.2,6.2,.3,1.35],[-1.1,6.4,-.4,1.4],[.2,8,-.6,1.3],[-.6,7.7,.9,1.25],[.8,5.9,-1.2,1.15],[-.9,5.7,1.1,1.1]].map((b,i)=>sphereBlob(b[0],b[1],b[2],b[3],i*1.7))),5,8.5,.5);
+const pineTrunk=new THREE.CylinderGeometry(.08,.2,8.4,6).translate(0,4.2,0);
+const pineLeaves=shadeCanopy(mergeGeos([[2.2,2.6,3.4],[3.8,2,3],[5.2,1.5,2.7],[6.5,1,2.4],[7.6,.55,2]].map(([b,r,h],i)=>lumpy(new THREE.ConeGeometry(r,h,10,2),.05,i).translate(0,b+h/2,0))),2,8,.4);
+const place=(q,t)=>{q.position.set(t.x,0,t.z);q.rotation.y=t.ry;q.scale.set(t.s,t.s*t.sy,t.s)};
+function plant(list,trunkG,canopyG,h0,hr,s,l0,lr){inst(trunkG,barkMat,list.length,(q,i)=>place(q,list[i]));inst(canopyG,leafMat,list.length,(q,i,m)=>{place(q,list[i]);m.setColorAt(i,new THREE.Color().setHSL(h0+rnd()*hr,s,l0+rnd()*lr))})}
+plant(TREES.filter(t=>!t.pine),broadTrunk,broadLeaves,.2,.1,.42,.34,.1);
+plant(TREES.filter(t=>t.pine),pineTrunk,pineLeaves,.34,.05,.42,.22,.08);
 // village houses (tin roofs)
 const Hs=[];for(let i=0;i<70;i++){const a=rnd()*6.283,r=rnd()<.4?138+rnd()*14:155+rnd()*230;Hs.push({x:Math.cos(a)*r,z:Math.sin(a)*r,a,w:5+rnd()*4,d:4+rnd()*3})}
 const wc=[0xe7d9b5,0xcfe0c8,0xe8b7a4,0xb9d2e6,0xe9e2cf],rc=[0x8a8f94,0x9a5a3c,0x6f7a80];
