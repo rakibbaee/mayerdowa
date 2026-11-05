@@ -170,8 +170,21 @@ mk(rg(2.5,.95,.1,.025),blue,0,1.88,.95);
 
 // ===== DESHI TRUCK SIMULATOR =====
 const V3=THREE.Vector3,o=new THREE.Object3D();
-S.background=new THREE.Color(0xc3d7e6);S.fog=new THREE.Fog(0xc3d7e6,90,430);
+const HZ=0xd6e9f5;
+S.background=new THREE.Color(HZ);S.fog=new THREE.Fog(HZ,140,520);
 cam.far=900;cam.position.set(120,6,-14);S.add(sun.target);
+// sky dome: deep blue zenith fading to a pale horizon, with a soft sun glow
+const skyMesh=new THREE.Mesh(new THREE.SphereGeometry(700,32,16),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:{sunDir:{value:new THREE.Vector3(14,22,10).normalize()}},
+ vertexShader:'varying vec3 vD;void main(){vD=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+ fragmentShader:'varying vec3 vD;uniform vec3 sunDir;void main(){float y=clamp(vD.y,0.,1.);vec3 top=vec3(.16,.42,.8),mid=vec3(.44,.7,.93),hor=vec3(.84,.92,.97);vec3 c=mix(hor,mid,smoothstep(0.,.35,y));c=mix(c,top,smoothstep(.3,.9,y));float s=max(dot(normalize(vD),sunDir),0.);c+=vec3(1.,.93,.75)*(pow(s,8.)*.3+pow(s,300.)*1.2);gl_FragColor=vec4(c,1.);}'}));
+S.add(skyMesh);
+// soft drifting cumulus clouds
+const cloudTex=tex(128,128,(g,w,h)=>{const r=g.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(.45,'rgba(255,255,255,.7)');r.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=r;g.fillRect(0,0,w,h)});
+const cloudMat=new THREE.SpriteMaterial({map:cloudTex,transparent:true,depthWrite:false,fog:false,opacity:.95});
+const cloudGroup=new THREE.Group();S.add(cloudGroup);
+for(let i=0;i<34;i++){const cl=new THREE.Group(),n=4+(Math.random()*4|0),an=Math.random()*6.283,dist=150+Math.random()*280;
+ for(let k=0;k<n;k++){const sp=new THREE.Sprite(cloudMat);sp.position.set((Math.random()-.5)*22,(Math.random()-.5)*5,(Math.random()-.5)*10);sp.scale.setScalar(18+Math.random()*16);cl.add(sp)}
+ cl.position.set(Math.cos(an)*dist,44+Math.random()*34,Math.sin(an)*dist);cloudGroup.add(cl)}
 truck.rotation.order='YXZ';truck.position.set(120,0,0);
 const rnd=(()=>{let a=7;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}})();
 // cab interior bits for driver view
@@ -252,12 +265,13 @@ function step(dt){
  // sound
  if(ac){const on2=!muted;eo.frequency.value=48+Math.abs(v)*2.6+inp.gas*14;eg.gain.value=on2?.05+.04*inp.gas+.0015*Math.abs(v):0;hg.gain.value=on2&&inp.horn?.12:0}
  // sun + camera
- sun.position.set(p.x+14,22,p.z+10);sun.target.position.copy(p);
+ sun.position.set(p.x+14,22,p.z+10);sun.target.position.copy(p);cloudGroup.rotation.y+=dt*.004;
  if(view===0){const f=new V3(Math.sin(h),0,Math.cos(h)),d=p.clone().addScaledVector(f,-(13+Math.abs(v)*.12));d.y=5.8;cam.position.lerp(d,1-Math.exp(-dt*3.2));cam.lookAt(p.x+f.x*5,2.2,p.z+f.z*5);if(cam.fov!==50){cam.fov=50;cam.updateProjectionMatrix()}}
  else{truck.updateMatrixWorld();cam.position.copy(truck.localToWorld(new V3(-.5,2.55,2.3)));cam.lookAt(truck.localToWorld(new V3(-.5,2.4,20)));if(cam.fov!==68){cam.fov=68;cam.updateProjectionMatrix()}}
+skyMesh.position.copy(cam.position);
 }
 function resize(){const w=innerWidth,hh=innerHeight;R.setSize(w,hh,false);cam.aspect=w/hh;cam.updateProjectionMatrix()}
 addEventListener('resize',resize);resize();
 let last=performance.now();
-(function loop(t){const dt=Math.min(.05,(t-last)/1000||0);last=t;step(dt);R.render(S,cam);requestAnimationFrame(loop)})(last);
+(function loop(t){const dt=Math.max(0,Math.min(.05,(t-last)/1000||0));last=t;step(dt);R.render(S,cam);requestAnimationFrame(loop)})(last);
 </script></body></html>
